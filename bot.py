@@ -3,7 +3,7 @@ import random
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
-TOKEN = "PASTE_YOUR_BOT_TOKEN_HERE"
+TOKEN = "8758244481:AAGgx1ZmC7blLY2Ll7Hu6N66G9HsR4LlE3Y"
 
 # ---- Database Simulation (Simple Version) ----
 users = {}
