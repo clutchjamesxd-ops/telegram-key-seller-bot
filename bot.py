@@ -58,7 +58,7 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"💰 Balance: {bal}")
 
 # ===== ADMIN ID (CHANGE THIS) =====
-ADMIN_ID = 123456789   # Replace with your Telegram ID
+ADMIN_ID = 8271376829   # Replace with your Telegram ID
 
 # ===== Add Key =====
 async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
