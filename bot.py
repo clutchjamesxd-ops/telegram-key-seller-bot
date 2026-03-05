@@ -57,6 +57,32 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bal = users.get(user_id, {}).get("fund", 0)
     await update.message.reply_text(f"💰 Balance: {bal}")
 
+# ===== ADMIN ID (CHANGE THIS) =====
+ADMIN_ID = 123456789   # Replace with your Telegram ID
+
+# ===== Add Key =====
+async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    if user_id != ADMIN_ID:
+        return
+    
+    if context.args:
+        key = context.args[0]
+        keys_stock.append(key)
+        await update.message.reply_text("✅ Key Added")
+    else:
+        await update.message.reply_text("Send key like:\n/addkey KEY-123")
+
+# ===== Check Stock =====
+async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    
+    await update.message.reply_text(
+        "Stock Keys:\n" + "\n".join(keys_stock)
+)
+
 # ---- Main ----
 app = ApplicationBuilder().token(TOKEN).build()
 
@@ -64,6 +90,8 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("buy", buy))
 app.add_handler(CommandHandler("mykeys", mykeys))
 app.add_handler(CommandHandler("balance", balance))
+app.add_handler(CommandHandler("addkey", addkey))
+app.add_handler(CommandHandler("stock", stock))
 
 print("Bot Running...")
 app.run_polling()
