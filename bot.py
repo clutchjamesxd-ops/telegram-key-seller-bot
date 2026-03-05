@@ -1,20 +1,21 @@
 import random
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
 # ===== BOT TOKEN =====
-TOKEN = "8758244481:AAFvmUcNNrmMKDgp3hqX1osX58ApYomC3n0"
+TOKEN = "PASTE_YOUR_TOKEN_HERE"
 
 # ===== ADMIN ID =====
-ADMIN_ID = 8271376829   # Change to your Telegram ID
+ADMIN_ID = 8271376829
 
-# ===== DATABASE (Simple Memory Version) =====
+# ===== DATABASE =====
 users = {}
 keys_stock = ["KEY-111", "KEY-222", "KEY-333"]
 
 earnings = 0
 
-# ================= START =================
+
+# ================= START MENU =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -25,29 +26,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "history": []
         }
 
+    keyboard = [
+        [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
+        [InlineKeyboardButton("🎁 My Keys", callback_data="mykeys")],
+        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+        [InlineKeyboardButton("📜 History", callback_data="history")]
+    ]
+
     await update.message.reply_text(
-        "🔥 Welcome to Key Seller Bot\n\n"
-        "/buy - Buy Key\n"
-        "/mykeys - My Keys\n"
-        "/balance - Balance\n"
-        "/history - Purchase History"
+        "🔥 Welcome to Digital Key Store\nChoose option below 👇",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 # ================= BUY KEY =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global earnings
 
-    user_id = update.effective_user.id
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+
+    if user_id not in users:
+        return
 
     if len(keys_stock) == 0:
-        await update.message.reply_text("❌ Out of stock")
+        await query.message.reply_text("❌ Out of stock")
         return
 
     if users[user_id]["fund"] < 10:
-        await update.message.reply_text("❌ Add fund first (Minimum 10)")
+        await query.message.reply_text("❌ Minimum fund required = 10")
         return
 
-    # Deduct money
     users[user_id]["fund"] -= 10
     earnings += 10
 
@@ -55,40 +66,35 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keys_stock.remove(key)
 
     users[user_id]["keys"].append(key)
-    users[user_id]["history"].append(f"Bought Key {key}")
+    users[user_id]["history"].append(f"Bought {key}")
 
-    await update.message.reply_text(f"✅ Purchased Key:\n{key}")
+    await query.message.reply_text(f"✅ Purchased Key:\n{key}")
 
-# ================= MY KEYS =================
-async def mykeys(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
 
-    keys = users.get(user_id, {}).get("keys", [])
+# ================= BUTTON HANDLER =================
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-    if not keys:
-        await update.message.reply_text("You have no keys")
-        return
+    user_id = query.from_user.id
 
-    await update.message.reply_text("\n".join(keys))
+    data = query.data
 
-# ================= BALANCE =================
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    if data == "buy":
+        await buy(update, context)
 
-    bal = users.get(user_id, {}).get("fund", 0)
-    await update.message.reply_text(f"💰 Balance: {bal}")
+    elif data == "mykeys":
+        keys = users.get(user_id, {}).get("keys", [])
+        await query.message.reply_text("\n".join(keys) if keys else "No keys")
 
-# ================= HISTORY =================
-async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    elif data == "balance":
+        bal = users.get(user_id, {}).get("fund", 0)
+        await query.message.reply_text(f"💰 Balance: {bal}")
 
-    hist = users.get(user_id, {}).get("history", [])
+    elif data == "history":
+        hist = users.get(user_id, {}).get("history", [])
+        await query.message.reply_text("\n".join(hist) if hist else "No history")
 
-    if not hist:
-        await update.message.reply_text("No history")
-        return
-
-    await update.message.reply_text("\n".join(hist))
 
 # ================= ADMIN ADD KEY =================
 async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -96,11 +102,42 @@ async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if context.args:
-        key = context.args[0]
-        keys_stock.append(key)
+        keys_stock.append(context.args[0])
         await update.message.reply_text("✅ Key Added")
     else:
         await update.message.reply_text("Use:\n/addkey KEY")
+
+
+# ================= STOCK =================
+async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    await update.message.reply_text(
+        "Stock Keys:\n" + "\n".join(keys_stock)
+    )
+
+
+# ================= EARNINGS =================
+async def earnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    await update.message.reply_text(f"💵 Earnings: {earnings}")
+
+
+# ================= MAIN =================
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("addkey", addkey))
+app.add_handler(CommandHandler("stock", stock))
+app.add_handler(CommandHandler("earnings", earnings_cmd))
+
+app.add_handler(CallbackQueryHandler(button_handler))
+
+print("Bot Running...")
+app.run_polling()        await update.message.reply_text("Use:\n/addkey KEY")
 
 # ================= ADMIN CHECK STOCK =================
 async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
