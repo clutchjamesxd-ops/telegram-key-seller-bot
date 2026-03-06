@@ -1,6 +1,7 @@
 import random
+import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ===== CONFIG =====
 TOKEN = "8758244481:AAFvmUcNNrmMKDgp3hqX1osX58ApYomC3n0"
@@ -10,16 +11,16 @@ ADMIN_ID = 8271376829
 users = {}
 keys_stock = ["KEY-111", "KEY-222", "KEY-333"]
 
-fund_requests = {}   # user_id -> (amount, message_id)
+fund_requests = {}
 earnings = 0
 
 
 # ================= MAIN MENU =================
-def main_menu_keyboard():
+def main_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
-        [InlineKeyboardButton("💰 Add Fund", callback_data="addfund")],
-        [InlineKeyboardButton("🎁 My Keys", callback_data="mykeys")],
+        [InlineKeyboardButton("💰 Add Fund", callback_data="fund_menu")],
+        [InlineKeyboardButton("📜 Purchase History", callback_data="history")],
         [InlineKeyboardButton("💰 Balance", callback_data="balance")]
     ])
 
@@ -29,11 +30,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id not in users:
-        users[user_id] = {"fund": 0, "keys": [], "history": []}
+        users[user_id] = {
+            "fund": 0,
+            "history": []
+        }
+
+        try:
+            await context.bot.send_message(
+                ADMIN_ID,
+                f"🆕 New User Joined\nID: {user_id}"
+            )
+        except:
+            pass
 
     await update.message.reply_text(
-        "🔥 Welcome To Digital Store",
-        reply_markup=main_menu_keyboard()
+        "🔥 Welcome To Seller Store",
+        reply_markup=main_menu()
     )
 
 
@@ -57,13 +69,17 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = random.choice(keys_stock)
     keys_stock.remove(key)
 
-    users[user_id]["keys"].append(key)
+    time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    users[user_id]["history"].append(
+        f"Purchased {key} | {time_now}"
+    )
 
     await query.message.reply_text(f"✅ Your Key:\n{key}")
 
 
-# ================= ADD FUND MENU =================
-async def addfund_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ================= FUND MENU =================
+async def fund_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
@@ -80,7 +96,7 @@ async def addfund_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================= FUND REQUEST PROCESS =================
+# ================= FUND REQUEST =================
 async def fund_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -88,16 +104,17 @@ async def fund_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     amount = int(query.data.split("_")[1])
     user_id = query.from_user.id
 
-    msg = await query.message.reply_text(
-        f"Send payment screenshot for {amount} 💰"
+    fund_requests[user_id] = amount
+
+    await query.message.reply_text(
+        "📩 Send payment screenshot to admin.\nWait for approval."
     )
 
-    fund_requests[user_id] = (amount, msg.message_id)
-
+    # Forward request to admin
     await context.bot.send_message(
         ADMIN_ID,
         f"💰 Fund Request\nUser: {user_id}\nAmount: {amount}\n\n"
-        "Reply with:\n/approve USERID\n/reject USERID"
+        f"Approve: /approve {user_id}\nReject: /reject {user_id}"
     )
 
 
@@ -111,26 +128,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "buy":
         await buy(update, context)
 
-    elif data == "addfund":
-        await addfund_menu(update, context)
+    elif data == "fund_menu":
+        await fund_menu(update, context)
 
     elif data.startswith("fund_"):
         await fund_amount(update, context)
 
-    elif data == "mykeys":
+    elif data == "history":
         user_id = query.from_user.id
-        keys = users.get(user_id, {}).get("keys", [])
-        await query.message.reply_text("\n".join(keys) if keys else "No keys")
+
+        hist = users.get(user_id, {}).get("history", [])
+
+        await query.message.reply_text(
+            "\n".join(hist) if hist else "No History"
+        )
 
     elif data == "balance":
         user_id = query.from_user.id
         bal = users.get(user_id, {}).get("fund", 0)
+
         await query.message.reply_text(f"💰 Balance: {bal}")
 
     elif data == "back":
         await query.message.reply_text(
             "Main Menu",
-            reply_markup=main_menu_keyboard()
+            reply_markup=main_menu()
         )
 
 
@@ -139,30 +161,20 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    if not context.args:
-        return
+    if context.args:
+        user_id = int(context.args[0])
 
-    user_id = int(context.args[0])
+        if user_id in fund_requests:
+            amount = fund_requests[user_id]
 
-    if user_id in fund_requests:
-        amount, msg_id = fund_requests[user_id]
+            users[user_id]["fund"] += amount
 
-        users[user_id]["fund"] += amount
+            await context.bot.send_message(
+                user_id,
+                f"✅ Fund Added\nAmount: {amount}"
+            )
 
-        del fund_requests[user_id]
-
-        await context.bot.send_message(
-            user_id,
-            f"✅ Fund Added Successfully\nAmount: {amount}"
-        )
-
-        await update.message.reply_text("✅ Approved")
-
-        # Notify admin
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"💰 Fund Added To User {user_id}"
-        )
+            await update.message.reply_text("✅ Approved")
 
 
 # ================= ADMIN REJECT =================
@@ -170,20 +182,18 @@ async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    if not context.args:
-        return
+    if context.args:
+        user_id = int(context.args[0])
 
-    user_id = int(context.args[0])
+        if user_id in fund_requests:
+            del fund_requests[user_id]
 
-    if user_id in fund_requests:
-        del fund_requests[user_id]
+            await context.bot.send_message(
+                user_id,
+                "❌ Fund Request Rejected"
+            )
 
-        await context.bot.send_message(
-            user_id,
-            "❌ Fund Request Rejected"
-        )
-
-        await update.message.reply_text("Rejected")
+            await update.message.reply_text("Rejected")
 
 
 # ================= MAIN =================
@@ -192,34 +202,6 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("approve", approve))
 app.add_handler(CommandHandler("reject", reject))
-
-app.add_handler(CallbackQueryHandler(button_handler))
-
-print("Bot Running...")
-app.run_polling()        await update.message.reply_text("Use:\n/addkey KEY")
-
-
-async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    await update.message.reply_text("Stock:\n" + "\n".join(keys_stock))
-
-
-async def earnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    await update.message.reply_text(f"💵 Earnings: {earnings}")
-
-
-# ================= MAIN =================
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("addkey", addkey))
-app.add_handler(CommandHandler("stock", stock))
-app.add_handler(CommandHandler("earnings", earnings_cmd))
 
 app.add_handler(CallbackQueryHandler(button_handler))
 
