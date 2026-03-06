@@ -15,16 +15,12 @@ keys_stock = ["KEY-111", "KEY-222", "KEY-333"]
 earnings = 0
 
 
-# ================= START MENU =================
+# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if user_id not in users:
-        users[user_id] = {
-            "fund": 0,
-            "keys": [],
-            "history": []
-        }
+        users[user_id] = {"fund": 0, "keys": [], "history": []}
 
     keyboard = [
         [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
@@ -34,12 +30,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "🔥 Welcome to Digital Key Store\nChoose option below 👇",
+        "🔥 Welcome to Key Store Bot",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-# ================= BUY KEY =================
+# ================= BUY =================
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global earnings
 
@@ -56,7 +52,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if users[user_id]["fund"] < 10:
-        await query.message.reply_text("❌ Minimum fund required = 10")
+        await query.message.reply_text("❌ Minimum fund = 10")
         return
 
     users[user_id]["fund"] -= 10
@@ -68,7 +64,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users[user_id]["keys"].append(key)
     users[user_id]["history"].append(f"Bought {key}")
 
-    await query.message.reply_text(f"✅ Purchased Key:\n{key}")
+    await query.message.reply_text(f"✅ Purchased:\n{key}")
 
 
 # ================= BUTTON HANDLER =================
@@ -77,7 +73,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.from_user.id
-
     data = query.data
 
     if data == "buy":
@@ -96,7 +91,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("\n".join(hist) if hist else "No history")
 
 
-# ================= ADMIN ADD KEY =================
+# ================= ADMIN =================
 async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -108,17 +103,13 @@ async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Use:\n/addkey KEY")
 
 
-# ================= STOCK =================
 async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    await update.message.reply_text(
-        "Stock Keys:\n" + "\n".join(keys_stock)
-    )
+    await update.message.reply_text("Stock:\n" + "\n".join(keys_stock))
 
 
-# ================= EARNINGS =================
 async def earnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -135,37 +126,6 @@ app.add_handler(CommandHandler("stock", stock))
 app.add_handler(CommandHandler("earnings", earnings_cmd))
 
 app.add_handler(CallbackQueryHandler(button_handler))
-
-print("Bot Running...")
-app.run_polling()        await update.message.reply_text("Use:\n/addkey KEY")
-
-# ================= ADMIN CHECK STOCK =================
-async def stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    await update.message.reply_text(
-        "Stock Keys:\n" + "\n".join(keys_stock)
-    )
-
-# ================= ADMIN VIEW EARNINGS =================
-async def earnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    await update.message.reply_text(f"💵 Total Earnings: {earnings}")
-
-# ================= MAIN =================
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("buy", buy))
-app.add_handler(CommandHandler("mykeys", mykeys))
-app.add_handler(CommandHandler("balance", balance))
-app.add_handler(CommandHandler("history", history))
-app.add_handler(CommandHandler("addkey", addkey))
-app.add_handler(CommandHandler("stock", stock))
-app.add_handler(CommandHandler("earnings", earnings_cmd))
 
 print("Bot Running...")
 app.run_polling()
