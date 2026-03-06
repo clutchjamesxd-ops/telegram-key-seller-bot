@@ -1,3 +1,4 @@
+import json
 import random
 from telegram import *
 from telegram.ext import *
@@ -7,57 +8,61 @@ ADMIN_ID = 8271376829
 
 KEY_PRICE = 20
 
-users = {}
-keys_stock = []
-pending_payments = {}
+# ---------------- FILE STORAGE ----------------
+
+def load_json(file, default):
+    try:
+        with open(file, "r") as f:
+            return json.load(f)
+    except:
+        return default
+
+def save_json(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f, indent=4)
+
+keys_stock = load_json("keys.json", [])
+users = load_json("users.json", {})
+pending_payments = load_json("pending.json", {})
+
 waiting_amount = {}
-waiting_add_keys = {}
-waiting_remove_key = {}
 waiting_ss = {}
+
 earnings = 0
 
 
-# ---------------- MAIN MENU TEXT ----------------
+# ---------------- UI TEXT ----------------
 
-def main_menu_text():
+def main_text():
+    return """
+🔥 Premium Key Store
 
-    return (
-        "🔥 Welcome to Premium Key Store\n\n"
-        "⚡ Fast delivery\n"
-        "🔐 Secure payments\n"
-        "💎 Premium service\n\n"
-        "Choose an option below 👇"
-    )
+⚡ Instant Delivery
+🔐 Secure Payments
+💎 Trusted Service
 
+Choose option below 👇
+"""
 
-# ---------------- MAIN MENU BUTTONS ----------------
 
 def main_menu():
-
-    keyboard = [
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
         [InlineKeyboardButton("💰 Add Fund", callback_data="addfund")],
         [InlineKeyboardButton("💳 Balance", callback_data="balance")],
         [InlineKeyboardButton("📜 History", callback_data="history")]
-    ]
+    ])
 
-    return InlineKeyboardMarkup(keyboard)
-
-
-# ---------------- ADMIN MENU ----------------
 
 def admin_menu():
-
-    keyboard = [
+    return InlineKeyboardMarkup([
         [InlineKeyboardButton("➕ Add Keys", callback_data="admin_add")],
         [InlineKeyboardButton("➖ Remove Key", callback_data="admin_remove")],
         [InlineKeyboardButton("📦 Stock", callback_data="admin_stock")],
         [InlineKeyboardButton("👥 Users", callback_data="admin_users")],
         [InlineKeyboardButton("💰 Earnings", callback_data="admin_earn")],
         [InlineKeyboardButton("🔙 Back", callback_data="menu")]
-    ]
-
-    return InlineKeyboardMarkup(keyboard)
+    ])
 
 
 # ---------------- START ----------------
@@ -68,14 +73,15 @@ def start(update, context):
 
     if user_id not in users:
         users[user_id] = {"fund":0,"history":[]}
+        save_json("users.json", users)
 
     update.message.reply_text(
-        main_menu_text(),
+        main_text(),
         reply_markup=main_menu()
     )
 
 
-# ---------------- BUTTON HANDLER ----------------
+# ---------------- BUTTONS ----------------
 
 def buttons(update, context):
 
@@ -91,13 +97,10 @@ def buttons(update, context):
     if data == "buy":
 
         if users[user_id]["fund"] < KEY_PRICE:
-            query.edit_message_text(
-                f"❌ Insufficient balance\nKey Price = ₹{KEY_PRICE}",
-                reply_markup=main_menu()
-            )
+            query.edit_message_text("❌ Low balance", reply_markup=main_menu())
             return
 
-        if len(keys_stock) == 0:
+        if not keys_stock:
             query.edit_message_text("❌ Out of stock", reply_markup=main_menu())
             return
 
@@ -109,36 +112,28 @@ def buttons(update, context):
 
         earnings += KEY_PRICE
 
+        save_json("keys.json", keys_stock)
+        save_json("users.json", users)
+
         query.edit_message_text(
-            f"✅ Purchase Successful\n\n🔑 Your Key:\n`{key}`",
-            parse_mode="Markdown",
+            f"✅ Purchase Successful\n\n🔑 {key}",
             reply_markup=main_menu()
         )
-
 
     # BALANCE
     elif data == "balance":
-
-        bal = users[user_id]["fund"]
-
         query.edit_message_text(
-            f"💳 Your Balance: ₹{bal}",
+            f"💳 Balance: ₹{users[user_id]['fund']}",
             reply_markup=main_menu()
         )
-
 
     # HISTORY
     elif data == "history":
 
         hist = users[user_id]["history"]
+        text = "\n".join(hist) if hist else "No history"
 
-        text = "\n".join(hist) if hist else "No purchases yet"
-
-        query.edit_message_text(
-            f"📜 Purchase History\n\n{text}",
-            reply_markup=main_menu()
-        )
-
+        query.edit_message_text(text, reply_markup=main_menu())
 
     # ADD FUND
     elif data == "addfund":
@@ -146,64 +141,33 @@ def buttons(update, context):
         waiting_amount[user_id] = True
 
         query.edit_message_text(
-            "💰 Add Funds\n\n"
-            "Minimum ₹30\nMaximum ₹500\n\n"
-            "Send the amount you want to add.",
+            "💰 Add Fund\n\nMinimum ₹30 | Maximum ₹500\n\nSend amount to continue.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back", callback_data="menu")]
             ])
         )
 
-
     elif data == "menu":
-
-        query.edit_message_text(
-            main_menu_text(),
-            reply_markup=main_menu()
-        )
+        query.edit_message_text(main_text(), reply_markup=main_menu())
 
 
     # ADMIN PANEL
-    elif data == "admin_add":
+    if user_id == ADMIN_ID:
 
-        waiting_add_keys[user_id] = True
+        if data == "admin_add":
+            query.edit_message_text("Send keys line by line")
 
-        query.edit_message_text(
-            "Send keys separated by new line\nExample:\nKEY1\nKEY2"
-        )
+        elif data == "admin_remove":
+            query.edit_message_text("Send key to remove")
 
+        elif data == "admin_stock":
+            query.edit_message_text(f"Stock: {len(keys_stock)}")
 
-    elif data == "admin_remove":
+        elif data == "admin_users":
+            query.edit_message_text(f"Users: {len(users)}")
 
-        waiting_remove_key[user_id] = True
-
-        query.edit_message_text(
-            "Send key to remove"
-        )
-
-
-    elif data == "admin_stock":
-
-        query.edit_message_text(
-            f"📦 Stock = {len(keys_stock)} keys",
-            reply_markup=admin_menu()
-        )
-
-
-    elif data == "admin_users":
-
-        query.edit_message_text(
-            f"👥 Users = {len(users)}",
-            reply_markup=admin_menu()
-        )
-
-
-    elif data == "admin_earn":
-
-        query.edit_message_text(
-            f"💰 Earnings = ₹{earnings}",
-            reply_markup=admin_menu()
-        )
+        elif data == "admin_earn":
+            query.edit_message_text(f"Earnings: ₹{earnings}")
 
 
 # ---------------- TEXT HANDLER ----------------
@@ -223,51 +187,55 @@ def text_handler(update, context):
             return
 
         if amount < 30 or amount > 500:
-            update.message.reply_text("Amount must be ₹30 - ₹500")
+            update.message.reply_text("Amount must be ₹30-₹500")
             return
 
         pending_payments[user_id] = amount
         waiting_ss[user_id] = True
 
+        save_json("pending.json", pending_payments)
+
         del waiting_amount[user_id]
 
         update.message.reply_photo(
             open("qr.jpg","rb"),
-            caption=f"💰 Pay ₹{amount}\n\nThen send payment screenshot."
+            caption=f"""
+💰 Payment Request
+
+Amount: ₹{amount}
+
+Scan QR and pay
+Then send payment screenshot.
+"""
         )
         return
 
 
     # ADMIN ADD KEYS
-    if user_id in waiting_add_keys:
+    if user_id == ADMIN_ID and "\n" in text:
 
-        keys = text.split("\n")
-
-        for k in keys:
+        for k in text.split("\n"):
             keys_stock.append(k)
 
-        del waiting_add_keys[user_id]
+        save_json("keys.json", keys_stock)
 
         update.message.reply_text(
-            f"✅ {len(keys)} keys added",
+            f"✅ Keys added",
             reply_markup=admin_menu()
         )
-        return
 
 
     # ADMIN REMOVE KEY
-    if user_id in waiting_remove_key:
+    if user_id == ADMIN_ID:
 
         if text in keys_stock:
             keys_stock.remove(text)
-            msg = "Key removed"
-        else:
-            msg = "Key not found"
+            save_json("keys.json", keys_stock)
 
-        del waiting_remove_key[user_id]
-
-        update.message.reply_text(msg, reply_markup=admin_menu())
-        return
+            update.message.reply_text(
+                "Key removed",
+                reply_markup=admin_menu()
+            )
 
 
 # ---------------- SCREENSHOT ----------------
@@ -313,18 +281,22 @@ def approval(update, context):
     if data.startswith("approve_"):
 
         uid = int(data.split("_")[1])
+
         amount = pending_payments[uid]
 
         users[uid]["fund"] += amount
 
+        save_json("users.json", users)
+
         context.bot.send_message(
             uid,
-            f"✅ Payment Approved\n₹{amount} added to your balance"
+            f"✅ Payment Approved\n₹{amount} added to balance"
         )
 
-        query.edit_message_caption("✅ Approved")
+        query.edit_message_caption("Approved")
 
         del pending_payments[uid]
+        save_json("pending.json", pending_payments)
 
 
     elif data.startswith("reject_"):
@@ -333,18 +305,18 @@ def approval(update, context):
 
         context.bot.send_message(uid, "❌ Payment Rejected")
 
-        query.edit_message_caption("❌ Rejected")
+        query.edit_message_caption("Rejected")
 
         del pending_payments[uid]
+        save_json("pending.json", pending_payments)
 
 
-# ---------------- RUN BOT ----------------
+# ---------------- RUN ----------------
 
 updater = Updater(TOKEN, use_context=True)
 dp = updater.dispatcher
 
 dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("admin", lambda u,c: u.message.reply_text("⚙ Admin Panel", reply_markup=admin_menu()) if u.effective_user.id==ADMIN_ID else None))
 
 dp.add_handler(CallbackQueryHandler(buttons))
 dp.add_handler(CallbackQueryHandler(approval, pattern="approve_|reject_"))
