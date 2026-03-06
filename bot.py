@@ -3,7 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
 # ===== BOT TOKEN =====
-TOKEN = "PASTE_YOUR_TOKEN_HERE"
+TOKEN = "8758244481:AAFvmUcNNrmMKDgp3hqX1osX58ApYomC3n0"
 
 # ===== ADMIN ID =====
 ADMIN_ID = 8271376829
