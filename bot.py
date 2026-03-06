@@ -10,7 +10,7 @@ keys_stock = []
 pending_funds = {}
 adding_keys = set()
 
-KEY_PRICE = 10
+KEY_PRICE = 20
 
 
 # ===== MAIN MENU =====
@@ -98,7 +98,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "💰 Add Fund\n\n"
             "Send the amount you want to add.\n\n"
-            "Minimum: ₹30\n"
+            "Minimum: ₹20\n"
             "Maximum: ₹500"
         )
 
