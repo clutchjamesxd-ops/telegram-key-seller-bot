@@ -1,26 +1,15 @@
 import random
 import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    filters,
-    ContextTypes
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# ================= CONFIG =================
-TOKEN = "8758244481:AAFvmUcNNrmMKDgp3hqX1osX58ApYomC3n0"
+TOKEN = "PASTE_YOUR_TOKEN_HERE"
 ADMIN_ID = 8271376829
 
-# ================= DATABASE =================
 users = {}
 keys_stock = ["KEY-111", "KEY-222", "KEY-333"]
-
 pending_funds = {}
 
-# ================= MENU =================
 def main_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
@@ -29,7 +18,6 @@ def main_menu():
         [InlineKeyboardButton("💰 Balance", callback_data="balance")]
     ])
 
-# ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -41,74 +29,133 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu()
     )
 
-# ================= BUY KEY =================
-async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
+    data = query.data
 
-    if users[user_id]["fund"] < 10:
-        await query.message.reply_text("❌ Minimum fund required")
-        return
+    # BUY KEY
+    if data == "buy":
 
-    if not keys_stock:
-        await query.message.reply_text("❌ Out of stock")
-        return
+        if users[user_id]["fund"] < 10:
+            await query.message.reply_text("❌ Minimum fund required")
+            return
 
-    users[user_id]["fund"] -= 10
+        if not keys_stock:
+            await query.message.reply_text("❌ Out of stock")
+            return
 
-    key = random.choice(keys_stock)
-    keys_stock.remove(key)
+        users[user_id]["fund"] -= 10
 
-    users[user_id]["history"].append(
-        f"Purchased Key | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    )
+        key = random.choice(keys_stock)
+        keys_stock.remove(key)
 
-    await query.message.reply_text(f"✅ Your Key:\n{key}")
+        users[user_id]["history"].append(
+            f"Key Bought | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        )
 
-# ================= ADD FUND MENU =================
-async def addfund_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+        await query.message.reply_text(f"✅ Your Key:\n{key}")
 
-    await query.message.reply_photo(
-        photo=open("qr.jpg", "rb"),
-        caption=
-        "❤️ Trusted Payment System\n\n"
-        "💰 Minimum = 30\n"
-        "💰 Maximum = 500\n\n"
-        "👉 Send amount by typing number\n"
-        "👉 Then send payment screenshot 📸"
-    )
+    # ADD FUND
+    elif data == "addfund":
 
-# ================= MESSAGE HANDLER =================
+        await query.message.reply_photo(
+            photo=open("qr.jpg", "rb"),
+            caption="❤️ Trusted Payment\n\n"
+                    "Minimum: 30\n"
+                    "Maximum: 500\n\n"
+                    "Send amount then send screenshot 📸"
+        )
+
+    # HISTORY
+    elif data == "history":
+
+        hist = users.get(user_id, {}).get("history", [])
+
+        await query.message.reply_text(
+            "\n".join(hist) if hist else "No purchase history"
+        )
+
+    # BALANCE
+    elif data == "balance":
+
+        bal = users.get(user_id, {}).get("fund", 0)
+        await query.message.reply_text(f"💰 Balance: {bal}")
+
+    # APPROVE PAYMENT
+    elif data.startswith("approve_"):
+
+        if user_id != ADMIN_ID:
+            return
+
+        uid = int(data.split("_")[1])
+
+        if uid not in pending_funds:
+            await query.message.reply_text("Request expired")
+            return
+
+        amount = pending_funds[uid]
+
+        users.setdefault(uid, {"fund":0,"history":[]})
+        users[uid]["fund"] += amount
+
+        await context.bot.send_message(
+            uid,
+            f"✅ Payment Approved\n💰 Amount Added: {amount}"
+        )
+
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"✅ Fund added to user {uid}"
+        )
+
+        del pending_funds[uid]
+
+        await query.message.delete()
+
+    # REJECT PAYMENT
+    elif data.startswith("reject_"):
+
+        if user_id != ADMIN_ID:
+            return
+
+        uid = int(data.split("_")[1])
+
+        if uid not in pending_funds:
+            return
+
+        await context.bot.send_message(uid, "❌ Payment Rejected")
+
+        del pending_funds[uid]
+
+        await query.message.delete()
+
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.message.from_user.id
 
-    # Amount input
+    # USER SEND AMOUNT
     if update.message.text and update.message.text.isdigit():
 
         amount = int(update.message.text)
 
         if amount < 30 or amount > 500:
-            await update.message.reply_text("❌ Amount must be 30 - 500")
+            await update.message.reply_text("Amount must be between 30 - 500")
             return
 
         pending_funds[user_id] = amount
 
-        await update.message.reply_text(
-            "✅ Amount received\nNow send payment screenshot 📸"
-        )
+        await update.message.reply_text("Amount received. Now send screenshot 📸")
 
         await context.bot.send_message(
             ADMIN_ID,
             f"💰 Fund Request\nUser: {user_id}\nAmount: {amount}"
         )
 
-    # Screenshot
-    if update.message.photo and user_id in pending_funds:
+    # USER SEND SCREENSHOT
+    elif update.message.photo and user_id in pending_funds:
 
         photo = update.message.photo[-1].file_id
         amount = pending_funds[user_id]
@@ -123,89 +170,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             ADMIN_ID,
             photo=photo,
-            caption=f"💰 Fund Request\nUser: {user_id}\nAmount: {amount}",
+            caption=f"Payment Screenshot\nUser: {user_id}\nAmount: {amount}",
             reply_markup=keyboard
         )
 
-        await update.message.reply_text("✅ Screenshot sent ❤️")
+        await update.message.reply_text("Screenshot sent to admin ❤️")
 
-# ================= ADMIN APPROVAL =================
-async def admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    action, uid = query.data.split("_")
-    user_id = int(uid)
-
-    if user_id not in pending_funds:
-        return
-
-    amount = pending_funds[user_id]
-
-    if action == "approve":
-
-        users[user_id]["fund"] += amount
-
-        await context.bot.send_message(
-            user_id,
-            f"✅ Payment Approved ❤️\nAmount Added: {amount}"
-        )
-
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"✅ Payment Added To User {user_id}"
-        )
-
-        try:
-            await query.message.delete()
-        except:
-            pass
-
-    else:
-
-        await context.bot.send_message(
-            user_id,
-            "❌ Payment Rejected"
-        )
-
-        await query.message.reply_text("❌ Rejected")
-
-    pending_funds.pop(user_id, None)
-
-# ================= BUTTON HANDLER =================
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    if query.data == "buy":
-        await buy(update, context)
-
-    elif query.data == "addfund":
-        await addfund_menu(update, context)
-
-    elif query.data == "history":
-        hist = users.get(user_id, {}).get("history", [])
-        await query.message.reply_text(
-            "\n".join(hist) if hist else "No History"
-        )
-
-    elif query.data == "balance":
-        bal = users.get(user_id, {}).get("fund", 0)
-        await query.message.reply_text(f"💰 Balance: {bal}")
-
-# ================= MAIN =================
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(CallbackQueryHandler(admin_action))
 app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, message_handler))
 
 print("Bot Running...")
