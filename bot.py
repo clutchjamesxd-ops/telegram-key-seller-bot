@@ -1,13 +1,6 @@
 import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = "8758244481:AAFvmUcNNrmMKDgp3hqX1osX58ApYomC3n0"
 ADMIN_ID = 8271376829
@@ -20,7 +13,7 @@ adding_keys = set()
 KEY_PRICE = 10
 
 
-# ================= MAIN MENU =================
+# ===== MAIN MENU =====
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
@@ -31,28 +24,23 @@ def main_menu():
     return InlineKeyboardMarkup(keyboard)
 
 
-# ================= START =================
+# ===== START =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
     if user_id not in users:
-        users[user_id] = {
-            "fund": 0,
-            "history": []
-        }
+        users[user_id] = {"fund": 0, "history": []}
 
     await update.message.reply_text(
-        "🔥 *Welcome to Premium Key Store*\n\n"
-        "Buy game keys, tools and premium access.\n"
-        "Fast delivery ⚡ Trusted service 🔐\n\n"
-        "Select option below 👇",
-        parse_mode="Markdown",
+        "🔥 Welcome to Premium Key Store\n\n"
+        "Buy premium tools and keys instantly.\n\n"
+        "Choose an option below:",
         reply_markup=main_menu()
     )
 
 
-# ================= MENU BUTTON HANDLER =================
+# ===== MENU HANDLER =====
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -63,17 +51,11 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "buy":
 
         if len(keys_stock) == 0:
-            await query.edit_message_text(
-                "❌ Out of stock",
-                reply_markup=main_menu()
-            )
+            await query.edit_message_text("❌ Out of stock", reply_markup=main_menu())
             return
 
         if users[user_id]["fund"] < KEY_PRICE:
-            await query.edit_message_text(
-                "❌ Not enough balance",
-                reply_markup=main_menu()
-            )
+            await query.edit_message_text("❌ Not enough balance", reply_markup=main_menu())
             return
 
         key = keys_stock.pop(0)
@@ -82,9 +64,7 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         users[user_id]["history"].append(key)
 
         await query.edit_message_text(
-            f"✅ *Purchase Successful*\n\n"
-            f"🔑 Your Key:\n`{key}`",
-            parse_mode="Markdown",
+            f"✅ Purchase Successful\n\n🔑 Your Key:\n{key}",
             reply_markup=main_menu()
         )
 
@@ -113,19 +93,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "addfund":
 
+        pending_funds[user_id] = "amount"
+
         await query.edit_message_text(
-            "💰 *Add Funds*\n\n"
-            "Send the amount you want to add.\n"
+            "💰 Add Fund\n\n"
+            "Send the amount you want to add.\n\n"
             "Minimum: ₹30\n"
-            "Maximum: ₹500",
-            parse_mode="Markdown"
+            "Maximum: ₹500"
         )
 
-        pending_funds[user_id] = "waiting_amount"
 
-
-# ================= AMOUNT MESSAGE =================
-async def amount_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== RECEIVE AMOUNT =====
+async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     text = update.message.text
@@ -133,7 +112,7 @@ async def amount_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in pending_funds:
         return
 
-    if pending_funds[user_id] != "waiting_amount":
+    if pending_funds[user_id] != "amount":
         return
 
     try:
@@ -142,7 +121,7 @@ async def amount_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if amount < 30 or amount > 500:
-        await update.message.reply_text("Amount must be between 30 and 500")
+        await update.message.reply_text("Amount must be between ₹30 and ₹500")
         return
 
     pending_funds[user_id] = amount
@@ -153,8 +132,8 @@ async def amount_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================= SCREENSHOT =================
-async def screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== RECEIVE SCREENSHOT =====
+async def receive_ss(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
@@ -163,7 +142,7 @@ async def screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     amount = pending_funds[user_id]
 
-    if amount == "waiting_amount":
+    if amount == "amount":
         return
 
     photo = update.message.photo[-1].file_id
@@ -178,7 +157,7 @@ async def screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await context.bot.send_photo(
         ADMIN_ID,
         photo=photo,
-        caption=f"Payment Request\n\nUser: {user_id}\nAmount: ₹{amount}",
+        caption=f"Payment Request\nUser: {user_id}\nAmount: ₹{amount}",
         reply_markup=keyboard
     )
 
@@ -187,7 +166,7 @@ async def screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Payment sent for approval.")
 
 
-# ================= ADMIN APPROVAL =================
+# ===== APPROVAL =====
 async def approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -197,60 +176,53 @@ async def approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     data = query.data
-    action, user_id = data.split("_")
+    action, uid = data.split("_")
+    uid = int(uid)
 
-    user_id = int(user_id)
-
-    if user_id not in pending_funds:
+    if uid not in pending_funds:
         return
 
-    amount, msg_id = pending_funds[user_id]
+    amount, msg_id = pending_funds[uid]
 
     if action == "approve":
 
-        users[user_id]["fund"] += amount
+        users[uid]["fund"] += amount
 
-        await context.bot.send_message(
-            user_id,
-            f"✅ Fund Added ₹{amount}"
-        )
+        await context.bot.send_message(uid, f"✅ Fund Added ₹{amount}")
 
         await context.bot.send_message(
             ADMIN_ID,
-            f"💰 Payment Approved\nUser {user_id}\nAmount ₹{amount}"
+            f"💰 Payment Approved\nUser: {uid}\nAmount: ₹{amount}"
         )
 
     else:
 
-        await context.bot.send_message(
-            user_id,
-            "❌ Payment Rejected"
-        )
+        await context.bot.send_message(uid, "❌ Payment Rejected")
 
     await context.bot.delete_message(ADMIN_ID, msg_id)
 
-    del pending_funds[user_id]
+    del pending_funds[uid]
 
 
-# ================= ADMIN PANEL =================
+# ===== ADMIN PANEL =====
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.effective_user.id != ADMIN_ID:
         return
 
     keyboard = [
-        [InlineKeyboardButton("➕ Add Keys", callback_data="add_keys")],
-        [InlineKeyboardButton("📦 Stock", callback_data="stock")],
-        [InlineKeyboardButton("❌ Remove Key", callback_data="remove_key")]
+        [InlineKeyboardButton("➕ Add Keys", callback_data="addkeys")],
+        [InlineKeyboardButton("📦 Check Stock", callback_data="stock")],
+        [InlineKeyboardButton("❌ Remove Key", callback_data="remove")]
     ]
 
     await update.message.reply_text(
-        "🔧 Admin Panel",
+        "Admin Panel",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-# ================= ADMIN MENU =================
+# ===== ADMIN MENU =====
 async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -259,12 +231,12 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.from_user.id != ADMIN_ID:
         return
 
-    if query.data == "add_keys":
+    if query.data == "addkeys":
 
         adding_keys.add(ADMIN_ID)
 
         await query.edit_message_text(
-            "Send keys separated by new lines\n\nExample:\nKEY-111\nKEY-222"
+            "Send keys separated by new lines.\nExample:\nKEY1\nKEY2"
         )
 
     elif query.data == "stock":
@@ -274,9 +246,9 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             text = "\n".join(keys_stock)
 
-        await query.edit_message_text(f"📦 Stock:\n{text}")
+        await query.edit_message_text(f"Stock:\n{text}")
 
-    elif query.data == "remove_key":
+    elif query.data == "remove":
 
         if not keys_stock:
             await query.edit_message_text("No keys to remove")
@@ -287,7 +259,7 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"Removed key:\n{key}")
 
 
-# ================= RECEIVE KEYS =================
+# ===== RECEIVE KEYS =====
 async def receive_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
@@ -301,6 +273,7 @@ async def receive_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for k in keys:
         k = k.strip()
+
         if k:
             keys_stock.append(k)
             count += 1
@@ -308,23 +281,24 @@ async def receive_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
     adding_keys.remove(user_id)
 
     await update.message.reply_text(
-        f"{count} keys added.\nTotal stock: {len(keys_stock)}"
+        f"{count} keys added\nTotal stock: {len(keys_stock)}"
     )
 
 
-# ================= MAIN =================
+# ===== RUN BOT =====
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("admin", admin))
 
-app.add_handler(CallbackQueryHandler(menu_handler, pattern="^(buy|balance|addfund|history)$"))
-app.add_handler(CallbackQueryHandler(admin_menu, pattern="^(add_keys|stock|remove_key)$"))
+app.add_handler(CallbackQueryHandler(menu_handler))
+app.add_handler(CallbackQueryHandler(admin_menu))
+
 app.add_handler(CallbackQueryHandler(approval, pattern="^(approve_|reject_)"))
 
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, amount_message))
-app.add_handler(MessageHandler(filters.PHOTO, screenshot))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_amount))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys))
+app.add_handler(MessageHandler(filters.PHOTO, receive_ss))
 
 print("Bot Running...")
 app.run_polling()
