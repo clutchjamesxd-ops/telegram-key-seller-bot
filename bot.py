@@ -1,304 +1,344 @@
 import random
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
+import logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 
 TOKEN = "8758244481:AAHy51oS3ZJSn5N-UMTQG0Od1TKRsuQDbrs"
 ADMIN_ID = 8271376829
 
-users = {}
-keys_stock = []
-pending_funds = {}
-adding_keys = set()
-
 KEY_PRICE = 20
 
+users = {}
+keys_stock = []
+pending_payments = {}
+waiting_amount = {}
+waiting_ss = {}
 
-# ===== MAIN MENU =====
+waiting_add_keys = {}
+waiting_remove_key = {}
+
+earnings = 0
+
+logging.basicConfig(level=logging.INFO)
+
+# MAIN MENU
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("🛒 Buy Key", callback_data="buy")],
-        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
-        [InlineKeyboardButton("➕ Add Fund", callback_data="addfund")],
-        [InlineKeyboardButton("📜 Purchase History", callback_data="history")]
+        [InlineKeyboardButton("💰 Add Fund", callback_data="addfund")],
+        [InlineKeyboardButton("📜 Purchase History", callback_data="history")],
+        [InlineKeyboardButton("💳 Balance", callback_data="balance")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
-# ===== START =====
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ADMIN MENU
+def admin_menu():
+    keyboard = [
+        [InlineKeyboardButton("➕ Add Keys", callback_data="admin_add")],
+        [InlineKeyboardButton("➖ Remove Key", callback_data="admin_remove")],
+        [InlineKeyboardButton("📦 Check Stock", callback_data="admin_stock")],
+        [InlineKeyboardButton("👥 Users", callback_data="admin_users")],
+        [InlineKeyboardButton("💰 Earnings", callback_data="admin_earn")],
+        [InlineKeyboardButton("🔙 Back", callback_data="menu")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+# START
+def start(update: Update, context: CallbackContext):
 
     user_id = update.effective_user.id
 
     if user_id not in users:
         users[user_id] = {"fund": 0, "history": []}
 
-    await update.message.reply_text(
+    update.message.reply_text(
         "🔥 Welcome to Premium Key Store\n\n"
-        "Buy premium tools and keys instantly.\n\n"
-        "Choose an option below:",
+        "Buy premium access keys instantly.\n"
+        "Fast delivery • Trusted service • Secure payment\n\n"
+        "Use menu below.",
         reply_markup=main_menu()
     )
 
 
-# ===== MENU HANDLER =====
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    user_id = query.from_user.id
-
-    if query.data == "buy":
-
-        if len(keys_stock) == 0:
-            await query.edit_message_text("❌ Out of stock", reply_markup=main_menu())
-            return
-
-        if users[user_id]["fund"] < KEY_PRICE:
-            await query.edit_message_text("❌ Not enough balance", reply_markup=main_menu())
-            return
-
-        key = keys_stock.pop(0)
-
-        users[user_id]["fund"] -= KEY_PRICE
-        users[user_id]["history"].append(key)
-
-        await query.edit_message_text(
-            f"✅ Purchase Successful\n\n🔑 Your Key:\n{key}",
-            reply_markup=main_menu()
-        )
-
-    elif query.data == "balance":
-
-        bal = users[user_id]["fund"]
-
-        await query.edit_message_text(
-            f"💰 Your Balance: ₹{bal}",
-            reply_markup=main_menu()
-        )
-
-    elif query.data == "history":
-
-        hist = users[user_id]["history"]
-
-        if not hist:
-            text = "No purchases yet"
-        else:
-            text = "\n".join(hist)
-
-        await query.edit_message_text(
-            f"📜 Purchase History\n\n{text}",
-            reply_markup=main_menu()
-        )
-
-    elif query.data == "addfund":
-
-        pending_funds[user_id] = "amount"
-
-        await query.edit_message_text(
-            "💰 Add Fund\n\n"
-            "Send the amount you want to add.\n\n"
-            "Minimum: ₹20\n"
-            "Maximum: ₹500"
-        )
-
-
-# ===== RECEIVE AMOUNT =====
-async def receive_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user_id = update.effective_user.id
-    text = update.message.text
-
-    if user_id not in pending_funds:
-        return
-
-    if pending_funds[user_id] != "amount":
-        return
-
-    try:
-        amount = int(text)
-    except:
-        return
-
-    if amount < 30 or amount > 500:
-        await update.message.reply_text("Amount must be between ₹30 and ₹500")
-        return
-
-    pending_funds[user_id] = amount
-
-    await update.message.reply_photo(
-        photo=open("qr.jpg", "rb"),
-        caption=f"Pay ₹{amount}\n\nSend payment screenshot after payment."
-    )
-
-
-# ===== RECEIVE SCREENSHOT =====
-async def receive_ss(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user_id = update.effective_user.id
-
-    if user_id not in pending_funds:
-        return
-
-    amount = pending_funds[user_id]
-
-    if amount == "amount":
-        return
-
-    photo = update.message.photo[-1].file_id
-
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
-        ]
-    ])
-
-    msg = await context.bot.send_photo(
-        ADMIN_ID,
-        photo=photo,
-        caption=f"Payment Request\nUser: {user_id}\nAmount: ₹{amount}",
-        reply_markup=keyboard
-    )
-
-    pending_funds[user_id] = (amount, msg.message_id)
-
-    await update.message.reply_text("Payment sent for approval.")
-
-
-# ===== APPROVAL =====
-async def approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    if query.from_user.id != ADMIN_ID:
-        return
-
-    data = query.data
-    action, uid = data.split("_")
-    uid = int(uid)
-
-    if uid not in pending_funds:
-        return
-
-    amount, msg_id = pending_funds[uid]
-
-    if action == "approve":
-
-        users[uid]["fund"] += amount
-
-        await context.bot.send_message(uid, f"✅ Fund Added ₹{amount}")
-
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"💰 Payment Approved\nUser: {uid}\nAmount: ₹{amount}"
-        )
-
-    else:
-
-        await context.bot.send_message(uid, "❌ Payment Rejected")
-
-    await context.bot.delete_message(ADMIN_ID, msg_id)
-
-    del pending_funds[uid]
-
-
-# ===== ADMIN PANEL =====
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ADMIN COMMAND
+def admin(update: Update, context: CallbackContext):
 
     if update.effective_user.id != ADMIN_ID:
         return
 
-    keyboard = [
-        [InlineKeyboardButton("➕ Add Keys", callback_data="addkeys")],
-        [InlineKeyboardButton("📦 Check Stock", callback_data="stock")],
-        [InlineKeyboardButton("❌ Remove Key", callback_data="remove")]
-    ]
-
-    await update.message.reply_text(
-        "Admin Panel",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(
+        "⚙ ADMIN PANEL",
+        reply_markup=admin_menu()
     )
 
 
-# ===== ADMIN MENU =====
-async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# BUTTON HANDLER
+def buttons(update: Update, context: CallbackContext):
+
+    global earnings
 
     query = update.callback_query
-    await query.answer()
+    query.answer()
 
-    if query.from_user.id != ADMIN_ID:
-        return
+    user_id = query.from_user.id
+    data = query.data
 
-    if query.data == "addkeys":
+    # BUY KEY
+    if data == "buy":
 
-        adding_keys.add(ADMIN_ID)
-
-        await query.edit_message_text(
-            "Send keys separated by new lines.\nExample:\nKEY1\nKEY2"
-        )
-
-    elif query.data == "stock":
-
-        if not keys_stock:
-            text = "No keys in stock"
-        else:
-            text = "\n".join(keys_stock)
-
-        await query.edit_message_text(f"Stock:\n{text}")
-
-    elif query.data == "remove":
-
-        if not keys_stock:
-            await query.edit_message_text("No keys to remove")
+        if len(keys_stock) == 0:
+            query.edit_message_text("❌ Out of stock", reply_markup=main_menu())
             return
 
-        key = keys_stock.pop()
+        if users[user_id]["fund"] < KEY_PRICE:
+            query.edit_message_text(
+                f"❌ Not enough balance\nKey price ₹{KEY_PRICE}",
+                reply_markup=main_menu()
+            )
+            return
 
-        await query.edit_message_text(f"Removed key:\n{key}")
+        key = random.choice(keys_stock)
+        keys_stock.remove(key)
+
+        users[user_id]["fund"] -= KEY_PRICE
+        users[user_id]["history"].append(key)
+
+        earnings += KEY_PRICE
+
+        query.edit_message_text(
+            f"✅ Key Purchased\n\n🔑 {key}",
+            reply_markup=main_menu()
+        )
+
+    # BALANCE
+    elif data == "balance":
+
+        bal = users[user_id]["fund"]
+
+        query.edit_message_text(
+            f"💳 Balance: ₹{bal}",
+            reply_markup=main_menu()
+        )
+
+    # HISTORY
+    elif data == "history":
+
+        hist = users[user_id]["history"]
+
+        if not hist:
+            text = "No purchases yet."
+        else:
+            text = "\n".join(hist)
+
+        query.edit_message_text(
+            f"📜 Purchase History\n\n{text}",
+            reply_markup=main_menu()
+        )
+
+    # ADD FUND
+    elif data == "addfund":
+
+        waiting_amount[user_id] = True
+
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="menu")]]
+
+        query.edit_message_text(
+            "💰 Add Fund\n\n"
+            "Send amount you want to add.\n\n"
+            "Minimum ₹30\nMaximum ₹500",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "menu":
+
+        query.edit_message_text(
+            "🏠 Main Menu",
+            reply_markup=main_menu()
+        )
+
+    # ADMIN PANEL BUTTONS
+    elif data == "admin_add":
+
+        waiting_add_keys[user_id] = True
+
+        query.edit_message_text(
+            "Send keys separated by new line\n\nExample:\nKEY1\nKEY2\nKEY3",
+            reply_markup=admin_menu()
+        )
+
+    elif data == "admin_remove":
+
+        waiting_remove_key[user_id] = True
+
+        query.edit_message_text(
+            "Send key to remove",
+            reply_markup=admin_menu()
+        )
+
+    elif data == "admin_stock":
+
+        query.edit_message_text(
+            f"📦 Stock: {len(keys_stock)} keys",
+            reply_markup=admin_menu()
+        )
+
+    elif data == "admin_users":
+
+        query.edit_message_text(
+            f"👥 Total Users: {len(users)}",
+            reply_markup=admin_menu()
+        )
+
+    elif data == "admin_earn":
+
+        query.edit_message_text(
+            f"💰 Earnings: ₹{earnings}",
+            reply_markup=admin_menu()
+        )
+
+    elif data.startswith("approve_"):
+
+        uid = int(data.split("_")[1])
+
+        amount = pending_payments[uid]
+
+        users[uid]["fund"] += amount
+
+        context.bot.send_message(
+            uid,
+            f"✅ Payment Approved\n₹{amount} added to your balance"
+        )
+
+        query.edit_message_caption("✅ Payment Approved")
+
+        del pending_payments[uid]
+
+    elif data.startswith("reject_"):
+
+        uid = int(data.split("_")[1])
+
+        context.bot.send_message(
+            uid,
+            "❌ Payment Rejected"
+        )
+
+        query.edit_message_caption("❌ Payment Rejected")
+
+        del pending_payments[uid]
 
 
-# ===== RECEIVE KEYS =====
-async def receive_keys(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# TEXT HANDLER
+def text_handler(update: Update, context: CallbackContext):
+
+    user_id = update.effective_user.id
+    text = update.message.text
+
+    # ADD FUND AMOUNT
+    if user_id in waiting_amount:
+
+        try:
+            amount = int(text)
+        except:
+            update.message.reply_text("Send valid number")
+            return
+
+        if amount < 30 or amount > 500:
+            update.message.reply_text("Amount must be ₹30-₹500")
+            return
+
+        pending_payments[user_id] = amount
+        waiting_ss[user_id] = True
+
+        del waiting_amount[user_id]
+
+        update.message.reply_photo(
+            open("qr.jpg", "rb"),
+            caption=f"Pay ₹{amount}\n\nSend screenshot after payment"
+        )
+
+        return
+
+    # ADMIN ADD KEYS
+    if user_id in waiting_add_keys:
+
+        keys = text.split("\n")
+
+        for k in keys:
+            keys_stock.append(k)
+
+        del waiting_add_keys[user_id]
+
+        update.message.reply_text(
+            f"✅ {len(keys)} keys added",
+            reply_markup=admin_menu()
+        )
+
+        return
+
+    # ADMIN REMOVE KEY
+    if user_id in waiting_remove_key:
+
+        if text in keys_stock:
+            keys_stock.remove(text)
+            msg = "Key removed"
+        else:
+            msg = "Key not found"
+
+        del waiting_remove_key[user_id]
+
+        update.message.reply_text(
+            msg,
+            reply_markup=admin_menu()
+        )
+
+        return
+
+
+# SCREENSHOT HANDLER
+def screenshot(update: Update, context: CallbackContext):
 
     user_id = update.effective_user.id
 
-    if user_id not in adding_keys:
+    if user_id not in waiting_ss:
         return
 
-    keys = update.message.text.split("\n")
+    photo = update.message.photo[-1].file_id
+    amount = pending_payments[user_id]
 
-    count = 0
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}")
+        ]
+    ]
 
-    for k in keys:
-        k = k.strip()
-
-        if k:
-            keys_stock.append(k)
-            count += 1
-
-    adding_keys.remove(user_id)
-
-    await update.message.reply_text(
-        f"{count} keys added\nTotal stock: {len(keys_stock)}"
+    context.bot.send_photo(
+        ADMIN_ID,
+        photo,
+        caption=f"Payment Request\nUser: {user_id}\nAmount: ₹{amount}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+    update.message.reply_text("Payment sent for approval")
 
-# ===== RUN BOT =====
-app = ApplicationBuilder().token(TOKEN).build()
+    del waiting_ss[user_id]
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("admin", admin))
 
-app.add_handler(CallbackQueryHandler(menu_handler))
-app.add_handler(CallbackQueryHandler(admin_menu))
+# RUN BOT
+updater = Updater(TOKEN, use_context=True)
+dp = updater.dispatcher
 
-app.add_handler(CallbackQueryHandler(approval, pattern="^(approve_|reject_)"))
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("admin", admin))
 
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_amount))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_keys))
-app.add_handler(MessageHandler(filters.PHOTO, receive_ss))
+dp.add_handler(CallbackQueryHandler(buttons))
 
-print("Bot Running...")
-app.run_polling()
+dp.add_handler(MessageHandler(Filters.text & ~Filters.command, text_handler))
+dp.add_handler(MessageHandler(Filters.photo, screenshot))
+
+print("Bot Started")
+
+updater.start_polling()
+updater.idle()
